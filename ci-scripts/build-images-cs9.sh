@@ -27,16 +27,21 @@
 #             standalone pattern; quickstart refuses 127.0.0.1/localhost).
 #             Passwordless ssh as root to $VIRTHOST must work.
 #   RELEASE   quickstart release config holding the repo definitions
-#             used by the repo-setup role.
+#             used by the repo-setup role, and the image artifact URLs.
+#   RDO_RELEASE  RDO trunk release the image is populated from; selects
+#             the delorean repos (https://trunk.rdoproject.org/centos9-<RDO_RELEASE>).
+#             Defaults to the release encoded in $RELEASE, e.g. "zed"
+#             for centosci/CentOS-9/zed-current-tripleo.
 set -eux
 
 RELEASE=${RELEASE:-"centosci/CentOS-9/master-current-tripleo"}
+RDO_RELEASE=${RDO_RELEASE:-$(basename "$RELEASE" | sed -e 's/-current-tripleo$//')}
 VIRTHOST=${VIRTHOST:-127.0.0.2}
 export VIRTHOST
 export OPT_WORKDIR=${OPT_WORKDIR:-~/.quickstart}
 
 TQ_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TRUNK_BASE="https://trunk.rdoproject.org/centos9-master"
+TRUNK_BASE="https://trunk.rdoproject.org/centos9-${RDO_RELEASE}"
 CENTOS_MIRROR="http://mirror.stream.centos.org/9-stream"
 IPA_IMAGE_URL="https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2"
 
@@ -55,6 +60,10 @@ fi
 cp -f "$TQ_DIR/playbooks/build-images.yml" "$OPT_WORKDIR/playbooks/"
 mkdir -p "$OPT_WORKDIR/config/general_config"
 cp -f "$TQ_DIR/config/general_config/build_images.yml" "$OPT_WORKDIR/config/general_config/"
+# The release file must exist under $OPT_WORKDIR/config/release/, which is
+# where quickstart.sh includes it from (-R <path> is relative to there).
+mkdir -p "$OPT_WORKDIR/config/release/$(dirname "$RELEASE")"
+cp -f "$TQ_DIR/config/release/$RELEASE.yml" "$OPT_WORKDIR/config/release/$RELEASE.yml"
 
 # The pinned oooci-build-images role installs "libselinux-python3", a package
 # name that does not exist on el9 (it is python3-libselinux there).
@@ -64,12 +73,17 @@ if [ -f "$OOOCI_MAIN" ] && grep -q "name: libselinux-python3" "$OOOCI_MAIN"; the
 fi
 
 # Delorean trunk repos (component-based current-tripleo), same content as the
-# delorean.repo/delorean-deps.repo entries of the release file.
-if [ ! -e /etc/yum.repos.d/delorean.repo ]; then
+# delorean.repo/delorean-deps.repo entries of the release file. They are
+# re-fetched when they don't match the requested release, so switching
+# between releases on the same build host replaces them (both files embed
+# the centos9-<release> trunk base in their baseurls).
+if [ ! -e /etc/yum.repos.d/delorean.repo ] \
+   || ! grep -q "centos9-${RDO_RELEASE}" /etc/yum.repos.d/delorean.repo; then
     curl -fso /etc/yum.repos.d/delorean.repo \
         "$TRUNK_BASE/current-tripleo/delorean.repo"
 fi
-if [ ! -e /etc/yum.repos.d/delorean-deps.repo ]; then
+if [ ! -e /etc/yum.repos.d/delorean-deps.repo ] \
+   || ! grep -q "centos9-${RDO_RELEASE}" /etc/yum.repos.d/delorean-deps.repo; then
     curl -fso /etc/yum.repos.d/delorean-deps.repo \
         "$TRUNK_BASE/delorean-deps.repo"
 fi
