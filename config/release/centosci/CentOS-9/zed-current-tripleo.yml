@@ -28,6 +28,16 @@ ipa_image_url: "{{ image_location }}/ironic-python-agent.tar"
 overcloud_as_undercloud: true
 update_images: true
 
+# ansible-tripleo-ipa is pulled into the undercloud image by
+# openstack-tripleo-common, but its ansible-freeipa dependency cannot
+# resolve: current CentOS Stream appstream builds of ansible-freeipa
+# require distro ansible-core with epoch 1, which openstack-ansible-core
+# (from the frozen zed trunk, installed in the image) obsoletes while
+# providing ansible-core without the epoch. The freeipa/TLS deployment
+# path is not used, so install ansible-tripleo-ipa without its deps.
+convert_image_nodeps_pkgs:
+  - ansible-tripleo-ipa
+
 libvirt_session_socket: virtqemud-sock
 
 images:

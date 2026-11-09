@@ -16,6 +16,12 @@ convert_image_remove_pkgs:
 convert_image_install_pkgs:
   - "{{ 'python3-tripleoclient' if ansible_distribution_major_version is version(8, '>=') else 'python-tripleoclient' }}"
 
+# Packages to install with rpm --nodeps before convert_image_install_pkgs.
+# Use for packages whose dependency chain cannot resolve on a frozen
+# release image against the moving distro repos, and whose skipped
+# dependencies are not used by the deployment.
+convert_image_nodeps_pkgs: []
+
 convert_image_tempest_plugins: []
 convert_image_host_memory: 2048
 guest_partition: /dev/sda

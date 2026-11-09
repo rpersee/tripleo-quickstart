@@ -21,6 +21,18 @@ fi
 {% endif %}
 
 {{ ansible_pkg_mgr }} remove -y {{ convert_image_remove_pkgs|join(" ") }}
+{% for pkg in convert_image_nodeps_pkgs|default([]) %}
+# Install {{ pkg }} without honoring its dependencies: its dependency chain
+# cannot resolve on a frozen release image against the moving distro repos
+# (ansible-tripleo-ipa pulls ansible-freeipa, which requires the distro
+# ansible-core with epoch 1, unsatisfiable where openstack-ansible-core
+# obsoletes ansible-core and provides it without an epoch). The skipped
+# dependencies (freeipa/TLS deployment bits) are not used by this
+# deployment.
+{{ ansible_pkg_mgr }} download -y {{ pkg }}
+rpm -ivh --nodeps {{ pkg }}-*.noarch.rpm
+rm -f {{ pkg }}-*.noarch.rpm
+{% endfor %}
 {{ ansible_pkg_mgr }} install -y {{ convert_image_install_pkgs|join(" ") }}
 {% if convert_image_tempest_plugins is defined and convert_image_tempest_plugins|length %}
 {# keep plugins install isolated from previous yum install to ease debugging #}
