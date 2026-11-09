@@ -11,3 +11,15 @@
 undercloud_memory: 11264
 control_memory: 8192
 compute_memory: 3072
+
+# tqe's undercloud-deploy role derives undercloud_nameservers from the
+# virthost's /etc/resolv.conf with an IPv4-only awk regex that mangles
+# IPv6 nameservers (2a02:8429:3783:6301::1 becomes "2a02:8429:"); the
+# invalid entry then aborts the undercloud install with a
+# netaddr.AddrFormatError while creating the ctlplane-subnet
+# (DnsNameServers of UndercloudCtlplaneNetworkDeployment). Skip the
+# virthost-derived nameservers and set them explicitly from this host's
+# resolv.conf instead, which handles both IPv4 and IPv6. This must be
+# set here (last -e file wins over default_libvirt.yml's conditional).
+nameserver_from_virthost: false
+undercloud_undercloud_nameservers: "{{ lookup('file', '/etc/resolv.conf') | regex_findall('nameserver\\s+(\\S+)') }}"
