@@ -1,0 +1,13 @@
+# VM RAM sizing override for the 1ctlr_1comp node layout, for memory
+# constrained virt hosts (fits an undercloud plus 2 overcloud VMs into
+# ~23 GiB of host RAM).
+#
+# The undercloud VM memory and the libvirt flavors backing the overcloud
+# nodes are defined in roles/common/defaults/main.yml:
+#   undercloud_memory (default 12288) and
+#   control_memory / compute_memory (default default_memory: 8192).
+# Note that the controller flavor knob is control_memory; a
+# "controller_memory" extra-var would be silently ignored.
+undercloud_memory: 11264
+control_memory: 8192
+compute_memory: 3072
