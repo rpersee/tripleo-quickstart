@@ -69,7 +69,11 @@ This creates the working directory `/root/.quickstart` with:
   `/root/.quickstart/usr/local/share/ansible/roles/`.
 
 Subsequent runs reuse it; the build script keeps the pieces it needs in sync
-automatically.
+automatically. Note the workdir holds a **copy** of this checkout's roles,
+playbooks and configs (installed at bootstrap): after updating this
+checkout, re-run `./quickstart.sh --clean` (or `--install-deps` +
+bootstrap) so the workdir picks the changes up. The build script's
+tqe-role patches are re-applied automatically on every build run.
 
 ## 3. Build the Zed images
 
@@ -135,13 +139,21 @@ Piece by piece:
   containers from `quay.rdoproject.org/tripleozedcentos9`.
 - **`--nodes config/nodes/1ctlr_1comp.yml`** — the node layout: 1 controller
   VM on flavor `control`, 1 compute VM on flavor `compute`.
-- **`-e @config/environments/custom_flavors_1ctlr_1comp.yml`** — RAM sizing
-  for ~23 GiB hosts:
-  - `undercloud_memory: 11264` (default would be 12288),
-  - `control_memory: 8192`, `compute_memory: 3072` (defaults would be 8192
-    each). Note the controller knob is **`control_memory`** — a
-    `controller_memory` variable is silently ignored.
-  - Extra-vars win over release/nodes config, so these stick.
+- **`-e @config/environments/custom_flavors_1ctlr_1comp.yml`** — environment
+  overrides for the lab:
+  - RAM sizing for ~23 GiB hosts: `undercloud_memory: 11264` (default would
+    be 12288), `control_memory: 8192`, `compute_memory: 3072` (defaults
+    would be 8192 each). Note the controller knob is **`control_memory`** —
+    a `controller_memory` variable is silently ignored.
+  - Undercloud DNS: `nameserver_from_virthost: false` plus an explicit
+    `undercloud_undercloud_nameservers` read from the host's
+    `/etc/resolv.conf` (IPv4 **and** IPv6). The pinned
+    tripleo-quickstart-extras derives them with an IPv4-only awk that
+    mangles IPv6 nameservers on a dual-stack host, and the mangled entry
+    aborts the undercloud install (`netaddr.AddrFormatError` creating the
+    `ctlplane-subnet`).
+  - Extra-vars win over release/nodes config (this file is passed last), so
+    these stick.
 - **no `-p`** — the default playbook is `quickstart-extras.yml`, the full
   flow. (`playbooks/quickstart.yml` alone would only provision the VMs and
   stop before installing the undercloud.)
@@ -153,8 +165,11 @@ from `file:///var/lib/oooq-images` into
 `overcloud-full.qcow2` into `undercloud.qcow2`, injection of the overcloud +
 IPA images into it → undercloud and overcloud VM creation (UEFI) → undercloud
 install (packages from the Zed trunk repos, containers from
-`quay.rdoproject.org/tripleozedcentos9`) → `openstack overcloud deploy` of
-1 controller + 1 compute via the virtual BMCs → post-deploy validation.
+`quay.rdoproject.org/tripleozedcentos9`; the release config passes
+`--no-validations` — the pre-install validations run ansible against the
+undercloud itself before its stack-user ssh keys exist) → `openstack
+overcloud deploy` of 1 controller + 1 compute via the virtual BMCs →
+post-deploy validation.
 
 Expect **several hours** on lab hardware; the deploy is resumable — re-running
 the same command tears down and rebuilds the VMs and continues.
@@ -210,10 +225,19 @@ when the branch was archived), so image rebuilds are reproducible.
   `/var/lib/oooq-images/{overcloud-full,ironic-python-agent}.tar` and their
   `.md5` files exist and pass `md5sum -c`; the fetch cache lives in
   `/var/cache/tripleo-quickstart/images/zed/` and can be wiped freely.
-- **Undercloud install fails** — the full log is on the undercloud VM:
+- **Undercloud install fails** — logs are on the undercloud VM:
   `ssh -F /root/.quickstart/ssh.config.ansible undercloud`, then
-  `/home/stack/.instack/install-undercloud.log` and
-  `/var/log/containers/` for container-level issues.
+  `/home/stack/undercloud_install.log` (orchestrator) and
+  `/home/stack/install-undercloud.log` (deploy). For a failure inside the
+  deploy-steps ansible run, extract the config-download bundle
+  `/home/stack/tripleo-deploy/undercloud/undercloud-install-*.tar.bzip2`
+  and read `undercloud-ansible-*/stdout` — it holds the per-task output and
+  the `PLAY RECAP`. `/var/log/containers/` covers container-level issues.
+- **Deploy crashes early with `hostvars['undercloud'] is undefined`** — a
+  stale ansible fact cache (`/root/.quickstart/ansible_facts_cache`, which
+  never expires) left by a previous run; fixed in this checkout's
+  `tripleo-inventory` role. If you wiped the workdir, re-run the bootstrap
+  so the fixed role is re-installed from this checkout.
 - **Collect a full log bundle**: run the step 4 command with
   `-p collect-logs.yml`; artifacts are placed in the current directory.
 
