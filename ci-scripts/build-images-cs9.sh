@@ -110,7 +110,7 @@ if ! grep -q "^ID=\"\?centos\"\?$" /etc/os-release; then
     if ! rpm -q containers-common >/dev/null 2>&1; then
         dnf install -y --downloadonly \
             --destdir=/tmp/containers-common-install containers-common
-        rpm -Uvh --replacefiles /tmp/containers-common-install/containers-common-*.rpm
+        rpm -Uvh --replacefiles /tmp/containers-common-install/*.rpm
     fi
 fi
 
