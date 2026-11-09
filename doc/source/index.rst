@@ -8,6 +8,7 @@ Contents:
 
    getting-started
    basic-usage
+   building-images-cs9
    configuration
    feature-configuration
    node-configuration
