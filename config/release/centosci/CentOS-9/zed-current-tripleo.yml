@@ -1,0 +1,80 @@
+release: zed
+distro_ver: centos9
+dlrn_hash_tag: current-tripleo
+docker_image_tag: "{{ dlrn_hash|default(dlrn_hash_tag) }}"
+dlrn_baseurl: "https://trunk.rdoproject.org/{{ distro_ver }}-{{ release }}"
+
+docker_registry_host: quay.rdoproject.org
+docker_registry_namespace: tripleozedcentos9
+
+# Images are the locally built artifacts from ci-scripts/build-images-cs9.sh
+# (which leaves overcloud-full.tar and ironic-python-agent.tar plus their
+# .md5 files in /var/lib/oooq-images). The former upstream image host
+# images.rdoproject.org is retired, so there is nothing to fetch zed
+# artifacts from anymore; the fetch-images role downloads with curl, which
+# understands file:// URLs.
+image_location: "file:///var/lib/oooq-images"
+
+# Classic partition based overcloud image, matching the build output
+# (overcloud-full.tar packs overcloud-full.qcow2 + overcloud-full.initrd +
+# overcloud-full.vmlinuz). With whole_disk_images false the overcloud-full
+# qcow2 also becomes the undercloud base image (overcloud_as_undercloud).
+whole_disk_images: false
+overcloud_image: overcloud-full
+overcloud_image_type: tar
+overcloud_image_url: "{{ image_location }}/overcloud-full.tar"
+ipa_image_url: "{{ image_location }}/ironic-python-agent.tar"
+
+overcloud_as_undercloud: true
+update_images: true
+
+libvirt_session_socket: virtqemud-sock
+
+images:
+  - name: "{{ overcloud_image }}"
+    url: "{{ overcloud_image_url }}"
+    type: "{{ overcloud_image_type }}"
+  - name: ipa_images
+    url: "{{ ipa_image_url }}"
+    type: tar
+
+repos:
+  - type: file
+    filename: delorean.repo
+    down_url: "https://trunk.rdoproject.org/{{ distro_ver }}-{{ release }}/{{ dlrn_hash_tag }}/delorean.repo"
+
+  - type: file
+    filename: delorean-deps.repo
+    down_url: https://trunk.rdoproject.org/{{ distro_ver }}-{{ release }}/delorean-deps.repo
+
+  - type: generic
+    reponame: quickstart-centos-base
+    filename: quickstart-centos-base.repo
+    baseurl: http://mirror.stream.centos.org/9-stream/BaseOS/x86_64/os/
+
+  - type: generic
+    reponame: quickstart-centos-appstreams
+    filename: quickstart-centos-appstreams.repo
+    baseurl: http://mirror.stream.centos.org/9-stream/AppStream/x86_64/os/
+
+  - type: generic
+    reponame: quickstart-centos-crb
+    filename: quickstart-centos-crb.repo
+    baseurl: http://mirror.stream.centos.org/9-stream/CRB/x86_64/os/
+
+  - type: generic
+    reponame: quickstart-centos-highavailability
+    filename: quickstart-centos-highavailability.repo
+    baseurl: http://mirror.stream.centos.org/9-stream/HighAvailability/x86_64/os/
+
+
+repo_cmd_after: |
+  sudo dnf repolist;
+  sudo dnf module list;
+  {% if repo_setup_run_update|default(true)|bool %}
+  sudo dnf update -y
+  {% endif %}
+
+undercloud_rpm_dependencies: >-
+  python3-tripleoclient
+  tripleo-operator-ansible
