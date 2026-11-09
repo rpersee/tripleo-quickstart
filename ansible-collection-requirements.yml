@@ -39,8 +39,8 @@ collections:
     source: git+https://opendev.org/openstack/ansible-config_template.git
     type: git
   - name: tripleo.operator
-    source: git+https://opendev.org/openstack/tripleo-operator-ansible/
+    source: git+https://opendev.org/openstack/tripleo-operator-ansible.git,e1abb34
     type: git
   - name: tripleo.collect_logs
-    source: git+https://opendev.org/openstack/ansible-role-collect-logs/
+    source: git+https://opendev.org/openstack/ansible-role-collect-logs.git,910efeb
     type: git
