@@ -124,6 +124,7 @@ if ! grep -q "^ID=\"\?centos\"\?$" /etc/os-release; then
         -e "tripleo_image_source=$IPA_IMAGE_URL"
         -e "tripleo_image_os=centos9"
         -e "dib_release=9-stream"
+        -e "dib_dnf_module_streams="
         -e "overcloud_repo_paths=['/etc/yum.repos.d/delorean*','/etc/yum.repos.d/quickstart-*']"
     )
 fi
