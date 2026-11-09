@@ -98,6 +98,22 @@ write_quickstart_repo quickstart-centos-highavailability HighAvailability
 # role to resolve the "current-tripleo" hash label.
 dnf install -y python3-tripleo-repos
 
+# On a RHEL build host: the CentOS containers-common rpm (pulled into the
+# python3-tripleoclient transaction from the delorean repos through the
+# tripleo-common/podman dependency chain) ships
+# /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release, which also belongs to the
+# redhat-release package, so the whole dnf transaction aborts with a file
+# conflict. Pre-install it with rpm --replacefiles (the file content is the
+# same RHEL release key) so the ansible package task finds it already
+# installed and skips it.
+if ! grep -q "^ID=\"\?centos\"\?$" /etc/os-release; then
+    if ! rpm -q containers-common >/dev/null 2>&1; then
+        dnf install -y --downloadonly \
+            --destdir=/tmp/containers-common-install containers-common
+        rpm -Uvh --replacefiles /tmp/containers-common-install/containers-common-*.rpm
+    fi
+fi
+
 # The pinned oooci-build-images role only loads its centos-9 defaults
 # (base image, DIB_RELEASE, ...) when the build host is CentOS. On any other
 # el9 distro, pass them explicitly and drop /etc/yum.repos.d/centos.repo from
