@@ -38,6 +38,12 @@ update_images: true
 convert_image_nodeps_pkgs:
   - ansible-tripleo-ipa
 
+# The undercloud pre-install validations run ansible from the undercloud
+# against itself (stack@127.0.0.1) before the undercloud install has set up
+# the stack user's ssh keys, so they fail with publickey and abort the
+# install. Skip them; the disk space they check is sized by this config.
+tripleo_undercloud_install_no_validations: true
+
 libvirt_session_socket: virtqemud-sock
 
 images:
