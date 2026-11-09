@@ -142,9 +142,12 @@ Piece by piece:
 - **`-e @config/environments/custom_flavors_1ctlr_1comp.yml`** — environment
   overrides for the lab:
   - RAM sizing for ~23 GiB hosts: `undercloud_memory: 11264` (default would
-    be 12288), `control_memory: 8192`, `compute_memory: 3072` (defaults
-    would be 8192 each). Note the controller knob is **`control_memory`** —
-    a `controller_memory` variable is silently ignored.
+    be 12288), `control_memory: 8192`, `compute_memory: 4096` (default
+    would be 8192). Note the controller knob is **`control_memory`** —
+    a `controller_memory` variable is silently ignored. Compute must stay
+    ≥ 4096: the ironic agent handles the ~1.4 GiB qcow2 in the node's
+    RAM-backed initramfs, which 3072 MiB cannot fit (deploy fails with
+    "No usable temporary directory found").
   - Undercloud DNS: `nameserver_from_virthost: false` plus an explicit
     `undercloud_undercloud_nameservers` read from the host's
     `/etc/resolv.conf` (IPv4 **and** IPv6). The pinned

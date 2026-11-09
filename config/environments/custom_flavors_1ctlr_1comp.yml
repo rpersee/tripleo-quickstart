@@ -8,9 +8,18 @@
 #   control_memory / compute_memory (default default_memory: 8192).
 # Note that the controller flavor knob is control_memory; a
 # "controller_memory" extra-var would be silently ignored.
+#
+# compute_memory must stay >= 4096: with partition images the ironic
+# agent downloads the ~1.4 GiB qcow2 into the node's RAM-backed
+# initramfs and converts it there (deploy step deploy.write_image). At
+# 3072 MiB that ran out of space and failed with "No usable temporary
+# directory found in ['/tmp', '/var/tmp', '/usr/tmp', '/']" while the
+# 8192 MiB controller deployed fine. The extra GiB over the host's
+# physical RAM is absorbed by swap (peak coincides with the undercloud
+# install phase, before the compute node is busy).
 undercloud_memory: 11264
 control_memory: 8192
-compute_memory: 3072
+compute_memory: 4096
 
 # tqe's undercloud-deploy role derives undercloud_nameservers from the
 # virthost's /etc/resolv.conf with an IPv4-only awk regex that mangles
