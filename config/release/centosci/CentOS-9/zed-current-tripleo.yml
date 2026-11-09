@@ -71,8 +71,15 @@ repos:
 repo_cmd_after: |
   sudo dnf repolist;
   sudo dnf module list;
+  # The opstools SIG repo keeps moving and conflicts with the frozen zed
+  # trunk (new qpid-proton vs the one zed's python3-pyngus pins), so
+  # disable it like the upstream tripleo-ci zed jobs do (they only enable
+  # it for collectd container builds).
+  sudo dnf config-manager --save --setopt centos9-opstools.enabled=0;
   {% if repo_setup_run_update|default(true)|bool %}
-  sudo dnf update -y
+  # FIXME(chandan): Exclude kernel updates due to
+  # https://bugs.launchpad.net/tripleo/+bug/1987632
+  sudo dnf update --exclude=kernel* -y
   {% endif %}
 
 undercloud_rpm_dependencies: >-
