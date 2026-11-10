@@ -13,6 +13,26 @@ else
     exit 1
 fi
 
+{% if convert_image_fix_uefi_boot|default(true)|bool %}
+# Fix UEFI local boot for partition images whose /boot lives inside the
+# root filesystem:
+# 1. ironic-python-agent seeds every ESP directory with a minimal
+#    grub.cfg from its own ramdisk that resolves /grub2/grub.cfg at a
+#    partition ROOT (a separate /boot partition layout). This image has
+#    /boot inside the root filesystem, so that chain dead-ends at a
+#    "grub>" prompt. Provide /grub2 as a symlink to boot/grub2 so the
+#    chain resolves to the real grub2-mkconfig config.
+# 2. The BLS entries in /boot/loader/entries hard-code the root
+#    filesystem UUID captured when the image was built, which does not
+#    match the UUID of the final image; the kernel would not find its
+#    root device. Point them at the filesystem LABEL instead (fstab
+#    already mounts / by the same label).
+if [ -d /boot/loader/entries ]; then
+    ln -sfn boot/grub2 /grub2
+    sed -i 's/root=UUID=[0-9a-f-]\{36\}/root=LABEL=img-rootfs/' /boot/loader/entries/*.conf
+fi
+{% endif %}
+
 {% if not undercloud_setup|bool %}
 
 {{ ansible_pkg_mgr }} clean all
