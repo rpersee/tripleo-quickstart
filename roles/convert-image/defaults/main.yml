@@ -27,6 +27,13 @@ convert_image_nodeps_pkgs: []
 # partition layout and BLS entries carry a stale build-time root UUID.
 convert_image_fix_uefi_boot: true
 
+# Fix ephemeral heat's message queue check (see convert_image.sh.j2):
+# pin heat's CONF.host so the engine RPC queue is named
+# "engine.ephemeral-heat" as tripleoclient's heat_launcher expects,
+# instead of inheriting the host hostname via podman >= 5 hostNetwork
+# containers.
+convert_image_fix_ephemeral_heat: true
+
 convert_image_tempest_plugins: []
 convert_image_host_memory: 2048
 guest_partition: /dev/sda

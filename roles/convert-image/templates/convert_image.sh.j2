@@ -43,6 +43,28 @@ rm -f {{ pkg }}-*.noarch.rpm
 
 {% endif %}
 
+{% if convert_image_fix_ephemeral_heat|default(true)|bool %}
+# Ephemeral heat (the temporary heat stack service that
+# `openstack overcloud deploy` starts) must expose a heat-engine RPC
+# queue named "engine.ephemeral-heat": tripleoclient's heat_launcher
+# polls rabbitmq for exactly that name (wait_for_message_queue) before
+# using the service. heat-engine names the queue
+# "engine.<CONF.host>" and CONF.host defaults to the container
+# hostname. The pod template runs with hostNetwork and no hostname
+# field, so current podman (>= 5) gives the containers the HOST's
+# hostname ("undercloud.localdomain"), the queue becomes
+# "engine.undercloud.localdomain" and the check can never match:
+# HeatPodMessageQueueException aborts the deploy ~10 s in (attempt 10).
+# A pod-spec "hostname:" field is NOT a fix: podman play kube ignores
+# it with hostNetwork (verified live). Pin CONF.host via the rendered
+# heat.conf instead. Idempotent, and only touches the template the
+# launcher renders fresh at deploy time.
+HEAT_POD_CONF_J2=/usr/share/python-tripleoclient/templates/ephemeral-heat/heat.conf.j2
+if [ -f "$HEAT_POD_CONF_J2" ] && ! grep -qE '^host[[:space:]]*=' "$HEAT_POD_CONF_J2"; then
+    sed -i '/^\[DEFAULT\]/a host = ephemeral-heat' "$HEAT_POD_CONF_J2"
+fi
+{% endif %}
+
 {% if overcloud_as_undercloud|bool %}
 # Create ifcfg file if not exist, as it's removed in overcloud prep
 # https://review.opendev.org/q/I3b8cb5f8c413c109da1228878db9cff4d439273b
