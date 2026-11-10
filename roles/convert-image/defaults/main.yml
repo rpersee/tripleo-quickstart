@@ -34,6 +34,15 @@ convert_image_fix_uefi_boot: true
 # containers.
 convert_image_fix_ephemeral_heat: true
 
+# Fix the ESP uuid race in the IPA ramdisk (see ipa_ramdisk_fix.sh.j2):
+# ironic_lib's block_uuid() probes lsblk/udev, which can still be
+# settling right after the agent partitions the node disk and formats
+# the EFI system partition; an empty probe result makes ironic skip the
+# UEFI boot setup and fail the deploy in BIOS grub2-install. The ramdisk
+# is re-fetched from the image tarball on every deploy, so the patch is
+# applied idempotently on each run.
+convert_image_fix_ipa_esp_uuid: true
+
 convert_image_tempest_plugins: []
 convert_image_host_memory: 2048
 guest_partition: /dev/sda

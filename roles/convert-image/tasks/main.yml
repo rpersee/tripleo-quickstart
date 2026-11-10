@@ -47,6 +47,26 @@
     - convert_image_fix_uefi_boot|default(true)|bool
     - overcloud_full_qcow2.stat.exists
 
+# The deploy agent (IPA ramdisk) can read an empty ESP uuid from the
+# udev database right after formatting the partition, which makes ironic
+# skip the UEFI boot setup (see ipa_ramdisk_fix.sh.j2). Patch the
+# initramfs extracted by fetch-images into the working dir: it is the
+# file later uploaded into the undercloud and served to the nodes, and
+# it is re-extracted fresh from the tarball on every run, so the patch
+# must run every time (the script itself is idempotent).
+- name: render the IPA ramdisk ESP uuid fix script
+  template:
+    src: ipa_ramdisk_fix.sh.j2
+    dest: "{{ convert_image_working_dir }}/ipa_ramdisk_fix.sh"
+    mode: 0755
+  when: convert_image_fix_ipa_esp_uuid|default(true)|bool
+
+- name: patch the IPA ramdisk block_uuid to retry on empty probes
+  become: true
+  command: "{{ convert_image_working_dir }}/ipa_ramdisk_fix.sh {{ convert_image_working_dir }}/ironic-python-agent.initramfs"
+  changed_when: true
+  when: convert_image_fix_ipa_esp_uuid|default(true)|bool
+
 - name: "copy {{ convert_image_base }}.qcow2 to undercloud.qcow2"
   command: >
     cp {{ convert_image_working_dir }}/{{ convert_image_base }}.qcow2
