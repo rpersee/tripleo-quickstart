@@ -31,6 +31,13 @@ fi
 WORK=$(mktemp -d /tmp/ipa-patch.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 gzip -dc "$IPA_INITRAMFS" | ( cd "$WORK" && cpio -id --quiet )
+# mktemp(1) creates the workspace with mode 0700, and cpio extraction
+# does not restore the "." entry's mode. Without this the repacked
+# initramfs has / as 0700: non-root services (dbus as the "dbus" user,
+# needed by NetworkManager) cannot traverse /, NetworkManager never
+# configures the NICs, and introspection times out with the agent
+# waiting for an IP address.
+chmod 0755 "$WORK"
 DU="$WORK/usr/lib/python3.9/site-packages/ironic_lib/disk_utils.py"
 if [ ! -f "$DU" ]; then
     echo "disk_utils.py not found in initramfs, aborting" >&2
