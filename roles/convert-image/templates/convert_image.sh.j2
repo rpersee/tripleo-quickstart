@@ -14,21 +14,43 @@ else
 fi
 
 {% if convert_image_fix_uefi_boot|default(true)|bool %}
-# Fix UEFI local boot for partition images whose /boot lives inside the
-# root filesystem:
-# 1. ironic-python-agent seeds every ESP directory with a minimal
-#    grub.cfg from its own ramdisk that resolves /grub2/grub.cfg at a
-#    partition ROOT (a separate /boot partition layout). This image has
-#    /boot inside the root filesystem, so that chain dead-ends at a
-#    "grub>" prompt. Provide /grub2 as a symlink to boot/grub2 so the
-#    chain resolves to the real grub2-mkconfig config.
-# 2. The BLS entries in /boot/loader/entries hard-code the root
-#    filesystem UUID captured when the image was built, which does not
-#    match the UUID of the final image; the kernel would not find its
-#    root device. Point them at the filesystem LABEL instead (fstab
-#    already mounts / by the same label).
+# Fix UEFI local boot for this image. The dib build leaves a minimal
+# grub.cfg at /boot/efi/EFI/centos/grub.cfg (the template that gets
+# copied onto the ESP created at deploy time) which does:
+#
+#     search --no-floppy --set prefix --file /grub2/grub.cfg
+#     set prefix=($prefix)/grub2
+#     configfile $prefix/grub.cfg
+#
+# That chain only resolves when /boot is a SEPARATE partition holding
+# /grub2/grub.cfg at its root. This image keeps /boot inside the root
+# filesystem, so the search finds nothing and grub drops to a bare
+# "grub>" prompt (observed on attempt 7: nodes provisioned to ironic
+# "active" but never booted, deploy wait timed out).
+#
+# Replace it with a loader that finds the real grub2-mkconfig config on
+# this image's layout (/boot inside the root filesystem) and mirrors the
+# semantics of the working chain (root and prefix pointing at the
+# directory tree that holds the real grub.cfg, which the grub binary
+# then loads and renders its BLS menu from). Do NOT instead create a
+# /grub2 symlink at the filesystem root: libguestfs inspection
+# classifies any filesystem containing /grub2/grub.cfg as a boot
+# partition rather than an OS root, which breaks virt-cat/
+# virt-customize inspection of the image ("no operating system was
+# found", attempt 8).
+if [ -f /boot/efi/EFI/centos/grub.cfg ] && [ -f /boot/grub2/grub.cfg ]; then
+cat >/boot/efi/EFI/centos/grub.cfg<<'EOF_GRUB'
+search --no-floppy --set=root --file /boot/grub2/grub.cfg
+set prefix=($root)/boot/grub2
+configfile ($root)/boot/grub2/grub.cfg
+EOF_GRUB
+fi
+# The BLS entries in /boot/loader/entries hard-code the root filesystem
+# UUID captured when the image was built, which does not match the UUID
+# of the final image; the kernel would not find its root device. Point
+# them at the filesystem LABEL instead (fstab already mounts / by the
+# same label).
 if [ -d /boot/loader/entries ]; then
-    ln -sfn boot/grub2 /grub2
     sed -i 's/root=UUID=[0-9a-f-]\{36\}/root=LABEL=img-rootfs/' /boot/loader/entries/*.conf
 fi
 {% endif %}

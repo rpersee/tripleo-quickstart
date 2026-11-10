@@ -23,8 +23,8 @@ convert_image_install_pkgs:
 convert_image_nodeps_pkgs: []
 
 # Fix UEFI local boot in the converted image (see convert_image.sh.j2):
-# the ironic ramdisk's grub.cfg chain expects /grub2/grub.cfg at a
-# partition root and BLS entries carry a stale build-time root UUID.
+# the dib-built ESP template's grub.cfg expects a separate /boot
+# partition layout and BLS entries carry a stale build-time root UUID.
 convert_image_fix_uefi_boot: true
 
 convert_image_tempest_plugins: []
