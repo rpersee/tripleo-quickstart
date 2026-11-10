@@ -643,6 +643,20 @@ if [ "$OPT_RETAIN_INVENTORY_FILE" = 0 -a -z "$OPT_LIST_TASKS_ONLY" ]; then
 [localhost]
 127.0.0.1  ansible_connection=local
 EOF
+    # Clear the ansible jsonfile fact cache as well: ansible.cfg keeps
+    # its entries forever (fact_caching_timeout = 0). A stale entry from
+    # a previous run outranks the fresh runtime value of the current one
+    # (cached facts rank above inventory/add_host vars), and the
+    # tripleo-inventory stage resolves hostvars['undercloud'].undercloud_ip
+    # for its ssh.config regeneration exactly that way. Every run
+    # generates fresh undercloud VM MACs and therefore a fresh DHCP IP,
+    # so a carried-over undercloud_ip makes the inventory point at a dead
+    # IP and the run dies at its first ssh attempt to the undercloud
+    # ("Connection closed by UNKNOWN port 65535", attempt 11: the cache
+    # held the previous run's 192.168.23.27 while the VM was at .33).
+    if [ -n "$VIRTUAL_ENV" ]; then
+        rm -rf "$VIRTUAL_ENV/ansible_facts_cache"
+    fi
 fi
 
 if [ "$OPT_DEBUG_ANSIBLE" = 1 ]; then
