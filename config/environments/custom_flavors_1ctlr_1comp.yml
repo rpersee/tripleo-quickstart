@@ -29,6 +29,23 @@ undercloud_memory: 10240
 control_memory: 8192
 compute_memory: 4096
 
+# tqe's os_tempest -> python_venv_build chain has a lazy-eval variable
+# cycle with this pinned combination: python_venv_build's default
+# venv_build_host is
+#   "{{ (venv_wheel_build_enable | bool) | ternary(venv_build_targets[...],
+#    inventory_hostname) }}"
+# while os_tempest's tempest_install_source.yml imports that role with
+#   venv_wheel_build_enable: "{{ venv_build_host != inventory_hostname }}"
+# import_role vars are visible to every task of the role, so resolving
+# either name recurses through the other and ansible aborts the
+# validation phase with "recursive loop detected in template string"
+# (attempt 15, right after "Including python_venv_wheel_build tasks").
+# Extra-vars have the highest ansible precedence, so pinning it here to
+# false breaks the cycle with a concrete value. Semantically correct
+# too: there is no repo_all wheel-build host in this inventory, and the
+# distro-install tempest path never builds wheels.
+venv_wheel_build_enable: false
+
 # tqe's undercloud-deploy role derives undercloud_nameservers from the
 # virthost's /etc/resolv.conf with an IPv4-only awk regex that mangles
 # IPv6 nameservers (2a02:8429:3783:6301::1 becomes "2a02:8429:"); the
