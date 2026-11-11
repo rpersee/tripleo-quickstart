@@ -186,27 +186,50 @@ the same command tears down and rebuilds the VMs and continues.
 
 ## 5. Verify and use
 
+### List the VMs and get a serial console
+
+The lab VMs run in **stack's libvirt *session* instance**, not the system one
+(`sudo virsh` shows nothing — that is expected):
+
 ```bash
 # as root on the host:
-ssh -F /root/.quickstart/ssh.config.ansible undercloud
+sudo -u stack env XDG_RUNTIME_DIR=/run/user/$(id -u stack) virsh list --all
+#  1  undercloud   running
+#  8  control_0    running
+#  9  compute_0    running
+
+sudo -u stack env XDG_RUNTIME_DIR=/run/user/$(id -u stack) virsh console undercloud
+# exit the console with Ctrl-]
 ```
 
-On the undercloud (as the `stack` user):
+### ssh to the VMs
+
+The aliases live in `/root/.quickstart/ssh.config.ansible` (keys are
+`id_rsa_undercloud` / `id_rsa_overcloud` in the same directory):
 
 ```bash
-source ~/stackrc
-openstack baremetal node list     # both nodes should be 'active'
-openstack server list             # controller + compute instances
-
-source ~/overcloudrc
-openstack service list            # overcloud catalog
-openstack compute service list
+ssh -F /root/.quickstart/ssh.config.ansible undercloud                # user stack
+ssh -F /root/.quickstart/ssh.config.ansible overcloud-controller-0    # user tripleo-admin
+ssh -F /root/.quickstart/ssh.config.ansible overcloud-compute-0       # (ProxyJump via undercloud)
 ```
 
-The overcloud endpoints are reachable from the undercloud VM; to reach them
-from the host, the undercloud VM's IP is in the inventory
-(`/root/.quickstart/undercloud` files) and works with the same ssh config
-(`ssh -F /root/.quickstart/ssh.config.ansible undercloud ...`).
+### OpenStack CLI (on the undercloud, as `stack`)
+
+```bash
+source ~/stackrc                 # the *undercloud* cloud (ironic, introspection)
+openstack baremetal node list    # both nodes should be 'active'
+openstack server list            # controller + compute instances
+
+source ~/overcloudrc             # the *overcloud* cloud you just deployed
+openstack service list           # overcloud catalog
+openstack compute service list   # NOTE: 'hypervisor stats show' is gone in Zed (API 2.88)
+```
+
+Overcloud endpoints (from `openstack endpoint list`): admin
+`http://172.16.2.128:35357`, internal `http://172.16.2.128:5000`, public
+`https://10.0.0.5:13000` (TLS with the undercloud-provided self-signed CA).
+They are reachable from the undercloud VM; from the host, ssh to the
+undercloud first and work from there.
 
 ## 6. Re-runs and teardown
 
