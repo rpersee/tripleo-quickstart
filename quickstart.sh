@@ -18,7 +18,7 @@ ZUUL_CLONER=/usr/zuul-env/bin/zuul-cloner
 
 : ${OPT_BOOTSTRAP:=0}
 : ${OPT_CLEAN:=0}
-: ${OPT_PLAYBOOK:=quickstart-extras.yml}
+: ${OPT_PLAYBOOK:=quickstart-extras-compat.yml}
 : ${OPT_RELEASE:=master}
 : ${OPT_RETAIN_INVENTORY_FILE:=0}
 : ${OPT_SYSTEM_PACKAGES:=0}
@@ -687,7 +687,7 @@ ansible-playbook -$VERBOSITY $OPT_WORKDIR/playbooks/$OPT_PLAYBOOK \
 
 set +x
 
-if ! [[ "overcloud-deploy" =~ .*$OPT_TAGS.* ]] && [[ $OPT_PLAYBOOK == quickstart-extras.yml ]]; then
+if ! [[ "overcloud-deploy" =~ .*$OPT_TAGS.* ]] && [[ $OPT_PLAYBOOK == quickstart-extras*.yml ]]; then
 
 cat <<EOF
 ##################################

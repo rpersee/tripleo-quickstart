@@ -157,9 +157,16 @@ Piece by piece:
     `ctlplane-subnet`).
   - Extra-vars win over release/nodes config (this file is passed last), so
     these stick.
-- **no `-p`** — the default playbook is `quickstart-extras.yml`, the full
-  flow. (`playbooks/quickstart.yml` alone would only provision the VMs and
-  stop before installing the undercloud.)
+- **no `-p`** — the default playbook is `quickstart-extras-compat.yml`, the
+  full flow plus one tq-layer THT compatibility play (see troubleshooting:
+  the frozen zed THT trips over the 2026 host's rsync). It imports the same
+  chain as the pinned `quickstart-extras.yml`
+  (provision → undercloud → overcloud-prep → overcloud → validate) with
+  `quickstart-extras-compat-tht.yml` inserted between the undercloud install
+  and the overcloud prep — the only window where a THT patch takes effect
+  (THT is installed by the undercloud install, not baked into the images,
+  and `openstack overcloud deploy` regenerates config-download from it).
+  Pass `-p quickstart-extras.yml` explicitly for the pristine pinned chain.
 - **`127.0.0.2`** — the virthost (positional argument, mandatory).
 
 The flow, roughly in order: virthost setup (libvirt, networks) → image fetch
@@ -260,6 +267,27 @@ when the branch was archived), so image rebuilds are reproducible.
   (`pacemaker_probe_fix.sh.j2`: rewrite all three providers' probes;
   commits `2ac600ed`, `db15e565`). If you wiped the workdir, re-run the
   bootstrap so the fixed role is re-installed.
+- **Overcloud deploy fails at deploy step 1 with `Failed containers:` listing
+  most `container-puppet-*` (and later `rabbitmq_wait_bundle` exit 6)** —
+  rsync >= 3.2.3 (2026 host distro) rejects `--files-from` entries that
+  match an `--exclude` pattern (`rejecting excluded file-list name`,
+  protocol incompatibility, rc 2). The frozen zed THT script
+  `common/container-puppet.sh` gathers "files modified during the puppet
+  run" with a find that only filters `/etc/puppet*`, but its rsync
+  excludes (built from `$ro_files`) also cover `/opt/puppetlabs` (the
+  shared facter-cache bind mount), `/etc/pki/...`, `/etc/openldap`,
+  `/etc/hosts`, ... — any file modified under those during a
+  container-puppet run aborts the whole config generation, so most
+  service configs never materialize. Fixed in this checkout's
+  `playbooks/quickstart-extras-compat-tht.yml` +
+  `files/patch_container_puppet_rsync.py` (derives the find filters from
+  the same `$ro_files` list; runs against the undercloud THT between the
+  undercloud install and the overcloud deploy via the new default
+  playbook chain `quickstart-extras-compat.yml`). If you wiped the
+  workdir, re-run the bootstrap so the new playbooks are installed, or
+  `cp -f playbooks/quickstart-extras-compat*.yml` and
+  `playbooks/files/patch_container_puppet_rsync.py` into
+  `$OPT_WORKDIR/playbooks/` yourself.
 - **Resuming a failed config-download run manually** — use
   `/home/stack/overcloud-deploy/overcloud/config-download/ansible-playbook-command.sh
   --start-at-task 'Set legacy facts'`. Starting later (e.g. at a step 2

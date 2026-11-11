@@ -1,0 +1,22 @@
+---
+# tq-layer compatibility fix for the frozen zed THT on a 2026-era host
+# distro. Imported by playbooks/quickstart-extras-compat.yml between the
+# undercloud install and the overcloud preparation/deployment: THT is
+# installed by the undercloud install (NOT present in the qcow2 image)
+# and `openstack overcloud deploy` regenerates config-download (which
+# verbatim-copies common/container-puppet.sh) from THT, so this window
+# is the only place a THT patch takes effect.
+#
+# See files/patch_container_puppet_rsync.py for the patched-in fix and
+# QUICKSTART.md "Troubleshooting" for the failure it addresses.
+- name: Apply THT compatibility patches for the 2026 host distro
+  hosts: undercloud
+  gather_facts: false
+  become: true
+  tags:
+    - overcloud-deploy
+  tasks:
+    - name: Patch container-puppet.sh for rsync >= 3.2.3 excluded file-list rejection
+      script: files/patch_container_puppet_rsync.py
+      register: _tht_rsync_patch
+      changed_when: "'patched:' in _tht_rsync_patch.stdout"

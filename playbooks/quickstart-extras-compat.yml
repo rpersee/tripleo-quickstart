@@ -1,0 +1,19 @@
+---
+# The full quickstart chain, identical to tripleo-quickstart-extras'
+# quickstart-extras.yml, plus one tq-layer compatibility play between
+# the undercloud install and the overcloud preparation/deployment.
+#
+# Why not edit quickstart-extras.yml: it ships from the pinned
+# tripleo-quickstart-extras checkout (never edited in place), and the
+# pinned content cannot carry 2026-host compatibility fixes. Declaring
+# the chain here (and pointing quickstart.sh's default playbook at it)
+# keeps the fix in the tripleo-quickstart layer, the only layer this
+# session owns. THT itself is NOT in the qcow2 images (its rpm install
+# time equals the undercloud install time), so no convert-image patch
+# can carry it either.
+- import_playbook: quickstart.yml
+- import_playbook: quickstart-extras-undercloud.yml
+- import_playbook: quickstart-extras-compat-tht.yml
+- import_playbook: quickstart-extras-overcloud-prep.yml
+- import_playbook: quickstart-extras-overcloud.yml
+- import_playbook: quickstart-extras-validate.yml
