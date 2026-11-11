@@ -1,0 +1,77 @@
+{% if convert_image_fix_pacemaker_probe|default(true)|bool %}
+# Fix the puppet-pacemaker location-constraint existence probe for
+# pcs >= 0.11.12 (2026 host distro) against the frozen zed puppet-pacemaker
+# 1.5.1 (Dec 2022).
+#
+# The pcmk_bundle and pcmk_resource providers probe for an existing
+# location constraint with:
+#
+#     pcs -f <cib> constraint list | grep location-<name>
+#
+# pcs 0.11.12 no longer prints constraint IDs in "constraint list"
+# output (it prints "resource 'name'" plus rules), so the grep never
+# matches and the probe always reports PCMK_NOTEXISTS. When the
+# constraint already exists (created moments earlier by the bundle
+# provider), the resource provider then tries to create the same
+# location rule and pcs refuses:
+#
+#   Error: duplicate constraint already exists, use --force to
+#   override. Too many tries
+#
+# which fails the mysql (galera) init bundle puppet at deploy step 2 on
+# the controller (observed on attempt 14; redis-bundle follows the same
+# pattern and would fail identically at its step).
+#
+# Replace the probe with "pcs constraint ref <subject>", whose output
+# still lists constraint IDs (verified against pcs 0.11.12 on a staged
+# CIB: constraint ref galera-bundle -> location-galera-bundle). The
+# subject is the bundle when the resource lives in one, the resource
+# name otherwise, mirroring how constraint_name is built below the
+# patched line.
+#
+# The patched probe also restores the intended create path: with a
+# working existence check, Pcmk_resource[galera] sees the location rule
+# already created by Pcmk_bundle[galera-bundle] and creates the
+# primitive active (no --disabled), as designed.
+#
+# Idempotent: once patched, the "constraint list" pattern no longer
+# matches and sed is a no-op.
+PCMK_MOD_DIR=/usr/share/openstack-puppet/modules/pacemaker/lib/puppet/provider
+for PROVIDER in pcmk_bundle pcmk_resource; do
+    F="$PCMK_MOD_DIR/$PROVIDER/default.rb"
+    if [ ! -f "$F" ]; then
+        echo "pacemaker_probe_fix: WARN $F not found, skipping"
+        continue
+    fi
+    if grep -q 'constraint list | grep #{constraint_name}' "$F"; then
+        if [ "$PROVIDER" = pcmk_bundle ]; then
+            REF_TARGET='#{@resource[:name]}'
+        else
+            REF_TARGET='#{bundle ? bundle : @resource[:name]}'
+        fi
+        sed -i "s,cmd = \"constraint list | grep #{constraint_name} > /dev/null 2>&1\",cmd = \"constraint ref $REF_TARGET | grep #{constraint_name} > /dev/null 2>\&1\"," "$F"
+        if grep -q 'constraint ref' "$F"; then
+            echo "pacemaker_probe_fix: patched $F"
+        else
+            echo "pacemaker_probe_fix: ERROR sed produced no change in $F"
+            exit 1
+        fi
+    else
+        if grep -q 'constraint ref' "$F"; then
+            echo "pacemaker_probe_fix: $F already patched"
+        else
+            echo "pacemaker_probe_fix: WARN no known probe pattern in $F (module layout changed?)"
+        fi
+    fi
+done
+# /etc/puppet/modules is first in the puppet modulepath; it is a
+# symlink into /usr/share/openstack-puppet/modules on tripleo images,
+# but patch it directly if an image ships real copies.
+if [ -d /etc/puppet/modules/pacemaker/lib/puppet/provider ] && \
+   [ ! -L /etc/puppet/modules/pacemaker ]; then
+    for PROVIDER in pcmk_bundle pcmk_resource; do
+        F="/etc/puppet/modules/pacemaker/lib/puppet/provider/$PROVIDER/default.rb"
+        [ -f "$F" ] && sed -i 's,constraint list | grep #{constraint_name},constraint ref #{bundle ? bundle : @resource[:name]} | grep #{constraint_name},' "$F" || true
+    done
+fi
+{% endif %}

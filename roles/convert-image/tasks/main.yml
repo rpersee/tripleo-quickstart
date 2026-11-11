@@ -67,6 +67,38 @@
   changed_when: true
   when: convert_image_fix_ipa_esp_uuid|default(true)|bool
 
+# pcs >= 0.11.12 (2026 host distro) no longer prints constraint IDs in
+# "constraint list" output, which breaks the frozen puppet-pacemaker
+# 1.5.1 existence probes: Pcmk_resource[galera] re-creates a location
+# rule the bundle provider just created and pcs fails with "duplicate
+# constraint already exists" (attempt 14 died at deploy step 2 on the
+# controller; redis-bundle follows the same pattern and would hit the
+# same failure at its step). Patch the probe to "pcs constraint ref",
+# which still lists constraint IDs. Applied to the base image like the
+# UEFI fix so the overcloud nodes boot with it; the undercloud never
+# runs these puppet tags, carrying the patch there is harmless.
+- name: render the pacemaker constraint probe fix script
+  template:
+    src: pacemaker_probe_fix.sh.j2
+    dest: "{{ convert_image_working_dir }}/pacemaker_probe_fix.sh"
+    mode: 0755
+  when: convert_image_fix_pacemaker_probe|default(true)|bool
+
+- name: patch the puppet-pacemaker constraint probe in the base image
+  command: >
+    virt-customize --smp 2 -m {{ convert_image_host_memory }}
+    -a {{ convert_image_working_dir }}/{{ convert_image_base }}.qcow2
+    --run pacemaker_probe_fix.sh
+  changed_when: true
+  args:
+    chdir: "{{ convert_image_working_dir }}"
+  environment:
+    LIBGUESTFS_BACKEND: direct
+    LIBVIRT_DEFAULT_URI: "{{ libvirt_uri }}"
+  when:
+    - convert_image_fix_pacemaker_probe|default(true)|bool
+    - overcloud_full_qcow2.stat.exists
+
 - name: "copy {{ convert_image_base }}.qcow2 to undercloud.qcow2"
   command: >
     cp {{ convert_image_working_dir }}/{{ convert_image_base }}.qcow2
