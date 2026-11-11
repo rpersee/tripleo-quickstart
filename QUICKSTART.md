@@ -241,6 +241,14 @@ when the branch was archived), so image rebuilds are reproducible.
   never expires) left by a previous run; fixed in this checkout's
   `tripleo-inventory` role. If you wiped the workdir, re-run the bootstrap
   so the fixed role is re-installed from this checkout.
+- **Introspection times out (both nodes `inspect failed`, never call back)** —
+  the IPA initramfs repack workspace (`mktemp -d`) defaults to mode `0700`,
+  leaving the initramfs root `/` as `0700`; non-root services such as D-Bus
+  (used by NetworkManager) cannot traverse `/`, so NetworkManager never
+  brings up the NICs and the agent waits forever for DHCP. Fixed in this
+  checkout's `convert-image` role (`ipa_ramdisk_fix.sh.j2`: add `chmod 0755
+  "$WORK"` after cpio extraction; commit `df87353f`). If you wiped the
+  workdir, re-run the bootstrap so the fixed role is re-installed.
 - **Collect a full log bundle**: run the step 4 command with
   `-p collect-logs.yml`; artifacts are placed in the current directory.
 
