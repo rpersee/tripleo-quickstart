@@ -1,0 +1,78 @@
+#!/bin/bash
+{% if convert_image_fix_ipa_esp_uuid|default(true)|bool %}
+# Fix an intermittent failure in the node deploy: ironic's
+# prepare_instance_boot step needs the EFI system partition UUID that
+# the deploy agent (IPA ramdisk) reports after writing the image. The
+# agent obtains it with ironic_lib's block_uuid(), which probes via
+# lsblk, i.e. the udev database. Freshly after partitioning + mkfs.vfat
+# the udev entry for the new ESP can still lack the UUID, and block_uuid
+# then returns an EMPTY string instead of failing. The empty value is
+# falsy, so the conductor skips the UEFI boot setup and falls back to
+# "grub2-install /dev/vda"; the image's grub2 then refuses ("This
+# utility should not be used for EFI platforms because it does not
+# support UEFI Secure Boot", the distro Secure Boot policy patch) and
+# the deploy fails (attempt 12: compute-0 "deploy failed" while
+# control-0 went active with the identical image).
+# Patch the ramdisk's block_uuid to retry for a few seconds when the
+# probe comes back empty; udev settles well within that window. The
+# initramfs is re-fetched from the image tarball on every deploy, so
+# this patch must be applied each run (this script is idempotent).
+set -e
+IPA_INITRAMFS="${1:-/home/stack/ironic-python-agent.initramfs}"
+MARKER='OOOQ_ESP_UUID_RETRY'
+if [ ! -f "$IPA_INITRAMFS" ]; then
+    echo "no initramfs at $IPA_INITRAMFS, skipping"
+    exit 0
+fi
+if gzip -dc "$IPA_INITRAMFS" 2>/dev/null | grep -aq "$MARKER"; then
+    echo "initramfs already patched"
+    exit 0
+fi
+WORK=$(mktemp -d /tmp/ipa-patch.XXXXXX)
+trap 'rm -rf "$WORK"' EXIT
+gzip -dc "$IPA_INITRAMFS" | ( cd "$WORK" && cpio -id --quiet )
+# mktemp(1) creates the workspace with mode 0700, and cpio extraction
+# does not restore the "." entry's mode. Without this the repacked
+# initramfs has / as 0700: non-root services (dbus as the "dbus" user,
+# needed by NetworkManager) cannot traverse /, NetworkManager never
+# configures the NICs, and introspection times out with the agent
+# waiting for an IP address.
+chmod 0755 "$WORK"
+DU="$WORK/usr/lib/python3.9/site-packages/ironic_lib/disk_utils.py"
+if [ ! -f "$DU" ]; then
+    echo "disk_utils.py not found in initramfs, aborting" >&2
+    exit 1
+fi
+cat >>"$DU" <<'EOF_PY'
+
+
+# OOOQ_ESP_UUID_RETRY: retry block_uuid while lsblk/udev has not yet
+# settled after partitioning or mkfs; an empty probe result made the
+# conductor skip the UEFI boot setup (see convert_image.sh.j2).
+def _oooq_block_uuid(dev):
+    import time as _time
+    for _attempt in range(20):
+        _info = {}
+        try:
+            _info = get_device_information(
+                dev, fields=['UUID', 'PARTUUID']) or {}
+        except Exception:
+            _info = {}
+        if _info.get('UUID'):
+            return _info['UUID']
+        if _info.get('PARTUUID'):
+            return _info['PARTUUID']
+        _time.sleep(0.5)
+    return ''
+
+
+block_uuid = _oooq_block_uuid
+EOF_PY
+# Syntax-check the patched file without py_compile (which would create
+# __pycache__ entries and change the archive layout).
+python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$DU"
+( cd "$WORK" && find . | cpio -o -H newc --quiet ) | gzip >"${IPA_INITRAMFS}.new"
+gzip -dc "${IPA_INITRAMFS}.new" | grep -aq "$MARKER"
+mv "${IPA_INITRAMFS}.new" "$IPA_INITRAMFS"
+echo "initramfs patched: $IPA_INITRAMFS"
+{% endif %}

@@ -20,6 +20,85 @@
     - overcloud_full_root_pwd is defined
     - overcloud_full_qcow2.stat.exists
 
+- name: render the UEFI local boot fix script
+  template:
+    src: uefi_boot_fix.sh.j2
+    dest: "{{ convert_image_working_dir }}/uefi_boot_fix.sh"
+    mode: 0755
+  when: convert_image_fix_uefi_boot|default(true)|bool
+
+# The base image is the one uploaded to glance and deployed to the
+# overcloud nodes, which boot locally through the ESP template this
+# fixes (the undercloud image is direct-kernel-booted and never runs
+# grub). Apply the fix to the base BEFORE the copy to undercloud.qcow2
+# so both images carry it.
+- name: apply the UEFI local boot fix to the base image
+  command: >
+    virt-customize --smp 2 -m {{ convert_image_host_memory }}
+    -a {{ convert_image_working_dir }}/{{ convert_image_base }}.qcow2
+    --run uefi_boot_fix.sh
+  changed_when: true
+  args:
+    chdir: "{{ convert_image_working_dir }}"
+  environment:
+    LIBGUESTFS_BACKEND: direct
+    LIBVIRT_DEFAULT_URI: "{{ libvirt_uri }}"
+  when:
+    - convert_image_fix_uefi_boot|default(true)|bool
+    - overcloud_full_qcow2.stat.exists
+
+# The deploy agent (IPA ramdisk) can read an empty ESP uuid from the
+# udev database right after formatting the partition, which makes ironic
+# skip the UEFI boot setup (see ipa_ramdisk_fix.sh.j2). Patch the
+# initramfs extracted by fetch-images into the working dir: it is the
+# file later uploaded into the undercloud and served to the nodes, and
+# it is re-extracted fresh from the tarball on every run, so the patch
+# must run every time (the script itself is idempotent).
+- name: render the IPA ramdisk ESP uuid fix script
+  template:
+    src: ipa_ramdisk_fix.sh.j2
+    dest: "{{ convert_image_working_dir }}/ipa_ramdisk_fix.sh"
+    mode: 0755
+  when: convert_image_fix_ipa_esp_uuid|default(true)|bool
+
+- name: patch the IPA ramdisk block_uuid to retry on empty probes
+  become: true
+  command: "{{ convert_image_working_dir }}/ipa_ramdisk_fix.sh {{ convert_image_working_dir }}/ironic-python-agent.initramfs"
+  changed_when: true
+  when: convert_image_fix_ipa_esp_uuid|default(true)|bool
+
+# pcs >= 0.11.12 (2026 host distro) no longer prints constraint IDs in
+# "constraint list" output, which breaks the frozen puppet-pacemaker
+# 1.5.1 existence probes: Pcmk_resource[galera] re-creates a location
+# rule the bundle provider just created and pcs fails with "duplicate
+# constraint already exists" (attempt 14 died at deploy step 2 on the
+# controller; redis-bundle follows the same pattern and would hit the
+# same failure at its step). Patch the probe to "pcs constraint ref",
+# which still lists constraint IDs. Applied to the base image like the
+# UEFI fix so the overcloud nodes boot with it; the undercloud never
+# runs these puppet tags, carrying the patch there is harmless.
+- name: render the pacemaker constraint probe fix script
+  template:
+    src: pacemaker_probe_fix.sh.j2
+    dest: "{{ convert_image_working_dir }}/pacemaker_probe_fix.sh"
+    mode: 0755
+  when: convert_image_fix_pacemaker_probe|default(true)|bool
+
+- name: patch the puppet-pacemaker constraint probe in the base image
+  command: >
+    virt-customize --smp 2 -m {{ convert_image_host_memory }}
+    -a {{ convert_image_working_dir }}/{{ convert_image_base }}.qcow2
+    --run pacemaker_probe_fix.sh
+  changed_when: true
+  args:
+    chdir: "{{ convert_image_working_dir }}"
+  environment:
+    LIBGUESTFS_BACKEND: direct
+    LIBVIRT_DEFAULT_URI: "{{ libvirt_uri }}"
+  when:
+    - convert_image_fix_pacemaker_probe|default(true)|bool
+    - overcloud_full_qcow2.stat.exists
+
 - name: "copy {{ convert_image_base }}.qcow2 to undercloud.qcow2"
   command: >
     cp {{ convert_image_working_dir }}/{{ convert_image_base }}.qcow2

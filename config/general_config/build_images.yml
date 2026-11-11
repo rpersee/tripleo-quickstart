@@ -3,6 +3,44 @@
 # so collect logs also connects as root, and not the default stack
 ssh_user: root
 
+# Build the images instead of fetching them. Without this the
+# check-to-build-or-not-to-build logic defaults to cached images.
+to_build: true
+
+# Build directly on the virthost (the oooci-build-images role from
+# tripleo-ci, same as the tripleo-buildimage-*-centos-9 zuul jobs).
+# The isolated mode (build inside a guest via libguestfs) is a leftover
+# from the CentOS 7 era: its isolation image default is a CentOS 7
+# GenericCloud qcow2 and nothing generates its build script anymore.
+build_image_isolated: false
+
+# Only build overcloud-full and ironic-python-agent, i.e. no undercloud
+# image conversion/injection. Set to true to also produce undercloud.qcow2.
+build_undercloud: false
+
+# Classic partition based overcloud image (overcloud-full.qcow2 + initrd +
+# vmlinuz packed in overcloud-full.tar). whole_disk_images would build
+# overcloud-hardened-uefi-full.qcow2 instead.
+whole_disk_images: false
+
+# Image sanity (rpm -Va via virt-customize) is disabled for centos 9,
+# see https://bugs.launchpad.net/tripleo/+bug/1950453
+image_sanity: false
+
+# Where the images, logs and final tarballs land on the virthost.
+# images_destroy_working_dir (default true) wipes it on every run.
+images_working_dir: /var/lib/oooq-images
+oooci_image_build_archive_dest: /var/lib/oooq-images
+
+# The pinned oooci-build-images role hardcodes the centos7 era path
+# /usr/share/tripleo-common. On el9 the openstack-tripleo-common rpm
+# installs the image-yaml configs under /usr/share/openstack-tripleo-common.
+tripleo_common_path: /usr/share/openstack-tripleo-common
+
+# Always build CentOS images (NODE_DIST/DISTRO_NAME), even when the
+# build host itself is another el9 distro.
+dib_node_dist: centos
+
 # this is required for image builds
 # Reference: https://github.com/openstack/tripleo-quickstart-extras/blob/master/roles/build-images/defaults/main.yml#L15
 # use an overcloud image as the undercloud after removing a few key rpms

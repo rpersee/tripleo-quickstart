@@ -16,10 +16,14 @@
   roles:
     - parts/kvm
     - parts/libvirt
-    # TODO(trown): It is not ideal that we need to set this
-    # variable directly on the role. However, we have the
-    # same variable used in the tripleo-quickstart roles
-    # with a different meaning. We should namespace the
-    # variables better so that they can both be set separately
-    # in a config file or extra-vars passed to ansible.
-    - {role: "image-build", working_dir: "/var/lib/oooq-images"}
+    # NOTE: The role used to be named "image-build", it was renamed to
+    # "build-images" in tripleo-quickstart-extras and now delegates the actual
+    # build to the oooci-build-images role from the tripleo-ci repo.
+    # In direct mode (build_image_isolated: false) it runs
+    # `openstack overcloud image build` on the virthost and packages
+    # overcloud-full.tar and ironic-python-agent.tar (with md5sums) into
+    # oooci_image_build_archive_dest.
+    # The role places images/logs in images_working_dir, not working_dir.
+    - {role: "build-images",
+       working_dir: "/var/lib/oooq-images",
+       images_working_dir: "/var/lib/oooq-images"}

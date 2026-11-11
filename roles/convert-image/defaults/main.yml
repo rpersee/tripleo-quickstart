@@ -16,6 +16,33 @@ convert_image_remove_pkgs:
 convert_image_install_pkgs:
   - "{{ 'python3-tripleoclient' if ansible_distribution_major_version is version(8, '>=') else 'python-tripleoclient' }}"
 
+# Packages to install with rpm --nodeps before convert_image_install_pkgs.
+# Use for packages whose dependency chain cannot resolve on a frozen
+# release image against the moving distro repos, and whose skipped
+# dependencies are not used by the deployment.
+convert_image_nodeps_pkgs: []
+
+# Fix UEFI local boot in the converted image (see convert_image.sh.j2):
+# the dib-built ESP template's grub.cfg expects a separate /boot
+# partition layout and BLS entries carry a stale build-time root UUID.
+convert_image_fix_uefi_boot: true
+
+# Fix ephemeral heat's message queue check (see convert_image.sh.j2):
+# pin heat's CONF.host so the engine RPC queue is named
+# "engine.ephemeral-heat" as tripleoclient's heat_launcher expects,
+# instead of inheriting the host hostname via podman >= 5 hostNetwork
+# containers.
+convert_image_fix_ephemeral_heat: true
+
+# Fix the ESP uuid race in the IPA ramdisk (see ipa_ramdisk_fix.sh.j2):
+# ironic_lib's block_uuid() probes lsblk/udev, which can still be
+# settling right after the agent partitions the node disk and formats
+# the EFI system partition; an empty probe result makes ironic skip the
+# UEFI boot setup and fail the deploy in BIOS grub2-install. The ramdisk
+# is re-fetched from the image tarball on every deploy, so the patch is
+# applied idempotently on each run.
+convert_image_fix_ipa_esp_uuid: true
+
 convert_image_tempest_plugins: []
 convert_image_host_memory: 2048
 guest_partition: /dev/sda

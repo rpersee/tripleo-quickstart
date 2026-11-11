@@ -1,0 +1,42 @@
+# VM RAM sizing override for the 1ctlr_1comp node layout, for memory
+# constrained virt hosts (fits an undercloud plus 2 overcloud VMs into
+# ~23 GiB of host RAM).
+#
+# The undercloud VM memory and the libvirt flavors backing the overcloud
+# nodes are defined in roles/common/defaults/main.yml:
+#   undercloud_memory (default 12288) and
+#   control_memory / compute_memory (default default_memory: 8192).
+# Note that the controller flavor knob is control_memory; a
+# "controller_memory" extra-var would be silently ignored.
+#
+# compute_memory must stay >= 4096: with partition images the ironic
+# agent downloads the ~1.4 GiB qcow2 into the node's RAM-backed
+# initramfs and converts it there (deploy step deploy.write_image). At
+# 3072 MiB that ran out of space and failed with "No usable temporary
+# directory found in ['/tmp', '/var/tmp', '/usr/tmp', '/']" while the
+# 8192 MiB controller deployed fine. The extra GiB over the host's
+# physical RAM is absorbed by swap (peak coincides with the undercloud
+# install phase, before the compute node is busy).
+#
+# Sizing was re-balanced after the first successful deployment
+# (attempt 14, 2026-11-11): the undercloud at 11264 MiB idled at 36%
+# used and touched only 24 MiB of its 4 GiB swap across the whole
+# build+deploy, so it gave 1 GiB back to the host (total VM demand
+# 22528 MiB vs 23719 MiB physical); the controller at 8192 MiB is the
+# tightest VM (64% used) but showed zero OOM pressure, and the compute
+# at 4096 MiB is the proven ironic-agent floor.
+undercloud_memory: 10240
+control_memory: 8192
+compute_memory: 4096
+
+# tqe's undercloud-deploy role derives undercloud_nameservers from the
+# virthost's /etc/resolv.conf with an IPv4-only awk regex that mangles
+# IPv6 nameservers (2a02:8429:3783:6301::1 becomes "2a02:8429:"); the
+# invalid entry then aborts the undercloud install with a
+# netaddr.AddrFormatError while creating the ctlplane-subnet
+# (DnsNameServers of UndercloudCtlplaneNetworkDeployment). Skip the
+# virthost-derived nameservers and set them explicitly from this host's
+# resolv.conf instead, which handles both IPv4 and IPv6. This must be
+# set here (last -e file wins over default_libvirt.yml's conditional).
+nameserver_from_virthost: false
+undercloud_undercloud_nameservers: "{{ lookup('file', '/etc/resolv.conf') | regex_findall('nameserver\\s+(\\S+)') }}"

@@ -13,6 +13,8 @@ else
     exit 1
 fi
 
+{% include 'uefi_boot_fix.sh.j2' %}
+
 {% if not undercloud_setup|bool %}
 
 {{ ansible_pkg_mgr }} clean all
@@ -21,12 +23,46 @@ fi
 {% endif %}
 
 {{ ansible_pkg_mgr }} remove -y {{ convert_image_remove_pkgs|join(" ") }}
+{% for pkg in convert_image_nodeps_pkgs|default([]) %}
+# Install {{ pkg }} without honoring its dependencies: its dependency chain
+# cannot resolve on a frozen release image against the moving distro repos
+# (ansible-tripleo-ipa pulls ansible-freeipa, which requires the distro
+# ansible-core with epoch 1, unsatisfiable where openstack-ansible-core
+# obsoletes ansible-core and provides it without an epoch). The skipped
+# dependencies (freeipa/TLS deployment bits) are not used by this
+# deployment.
+{{ ansible_pkg_mgr }} download -y {{ pkg }}
+rpm -ivh --nodeps {{ pkg }}-*.noarch.rpm
+rm -f {{ pkg }}-*.noarch.rpm
+{% endfor %}
 {{ ansible_pkg_mgr }} install -y {{ convert_image_install_pkgs|join(" ") }}
 {% if convert_image_tempest_plugins is defined and convert_image_tempest_plugins|length %}
 {# keep plugins install isolated from previous yum install to ease debugging #}
 {{ ansible_pkg_mgr }} install -y {{ convert_image_tempest_plugins|join(" ") }}
 {% endif %}
 
+{% endif %}
+
+{% if convert_image_fix_ephemeral_heat|default(true)|bool %}
+# Ephemeral heat (the temporary heat stack service that
+# `openstack overcloud deploy` starts) must expose a heat-engine RPC
+# queue named "engine.ephemeral-heat": tripleoclient's heat_launcher
+# polls rabbitmq for exactly that name (wait_for_message_queue) before
+# using the service. heat-engine names the queue
+# "engine.<CONF.host>" and CONF.host defaults to the container
+# hostname. The pod template runs with hostNetwork and no hostname
+# field, so current podman (>= 5) gives the containers the HOST's
+# hostname ("undercloud.localdomain"), the queue becomes
+# "engine.undercloud.localdomain" and the check can never match:
+# HeatPodMessageQueueException aborts the deploy ~10 s in (attempt 10).
+# A pod-spec "hostname:" field is NOT a fix: podman play kube ignores
+# it with hostNetwork (verified live). Pin CONF.host via the rendered
+# heat.conf instead. Idempotent, and only touches the template the
+# launcher renders fresh at deploy time.
+HEAT_POD_CONF_J2=/usr/share/python-tripleoclient/templates/ephemeral-heat/heat.conf.j2
+if [ -f "$HEAT_POD_CONF_J2" ] && ! grep -qE '^host[[:space:]]*=' "$HEAT_POD_CONF_J2"; then
+    sed -i '/^\[DEFAULT\]/a host = ephemeral-heat' "$HEAT_POD_CONF_J2"
+fi
 {% endif %}
 
 {% if overcloud_as_undercloud|bool %}
