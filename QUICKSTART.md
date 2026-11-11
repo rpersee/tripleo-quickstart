@@ -249,6 +249,26 @@ when the branch was archived), so image rebuilds are reproducible.
   checkout's `convert-image` role (`ipa_ramdisk_fix.sh.j2`: add `chmod 0755
   "$WORK"` after cpio extraction; commit `df87353f`). If you wiped the
   workdir, re-run the bootstrap so the fixed role is re-installed.
+- **Overcloud deploy fails at config-download step 2 with `duplicate
+  constraint already exists, use --force to override. Too many tries`** —
+  pcs 0.11.12 (2026 host distro) no longer prints constraint IDs in
+  `constraint list` output, so puppet-pacemaker 1.5.1's `location_exists?`
+  probe (`constraint list | grep location-<name>`) never matches; when the
+  constraint already exists (the bundle provider creates it moments
+  earlier), `Pcmk_resource[galera]` re-creates the same location rule and
+  pcs rejects the duplicate. Fixed in this checkout's `convert-image` role
+  (`pacemaker_probe_fix.sh.j2`: rewrite both providers' probes to
+  `pcs constraint ref <subject>`, which still lists IDs; commit
+  `2ac600ed`). If you wiped the workdir, re-run the bootstrap so the fixed
+  role is re-installed.
+- **Resuming a failed config-download run manually** — use
+  `/home/stack/overcloud-deploy/overcloud/config-download/ansible-playbook-command.sh
+  --start-at-task 'Set legacy facts'`. Starting later (e.g. at a step 2
+  task) skips the fact-gathering plays and dies in `first_found` with
+  "No file was found"; task-name needles must match the UNRENDERED Jinja
+  form (`--start-at-task 'Run init bundle puppet on the host for
+  {{ tripleo_ha_wrapper_service_name }}'`), not the rendered name from
+  the logs — otherwise every task is silently skipped (rc=10).
 - **Collect a full log bundle**: run the step 4 command with
   `-p collect-logs.yml`; artifacts are placed in the current directory.
 
