@@ -141,7 +141,7 @@ Piece by piece:
   VM on flavor `control`, 1 compute VM on flavor `compute`.
 - **`-e @config/environments/custom_flavors_1ctlr_1comp.yml`** — environment
   overrides for the lab:
-  - RAM sizing for ~23 GiB hosts: `undercloud_memory: 11264` (default would
+  - RAM sizing for ~23 GiB hosts: `undercloud_memory: 10240` (default would
     be 12288), `control_memory: 8192`, `compute_memory: 4096` (default
     would be 8192). Note the controller knob is **`control_memory`** —
     a `controller_memory` variable is silently ignored. Compute must stay

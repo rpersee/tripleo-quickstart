@@ -17,7 +17,15 @@
 # 8192 MiB controller deployed fine. The extra GiB over the host's
 # physical RAM is absorbed by swap (peak coincides with the undercloud
 # install phase, before the compute node is busy).
-undercloud_memory: 11264
+#
+# Sizing was re-balanced after the first successful deployment
+# (attempt 14, 2026-11-11): the undercloud at 11264 MiB idled at 36%
+# used and touched only 24 MiB of its 4 GiB swap across the whole
+# build+deploy, so it gave 1 GiB back to the host (total VM demand
+# 22528 MiB vs 23719 MiB physical); the controller at 8192 MiB is the
+# tightest VM (64% used) but showed zero OOM pressure, and the compute
+# at 4096 MiB is the proven ironic-agent floor.
+undercloud_memory: 10240
 control_memory: 8192
 compute_memory: 4096
 
