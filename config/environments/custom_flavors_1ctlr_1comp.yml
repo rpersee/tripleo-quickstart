@@ -46,6 +46,15 @@ compute_memory: 4096
 # distro-install tempest path never builds wheels.
 venv_wheel_build_enable: false
 
+# tempest.yml's "Load tests to be executed" block picks the tempest
+# whitelist from either the zuul job name (only exists in CI) or
+# tempest_allowed_group. With neither set locally, the list_allowed
+# module aborts with "You must specify either job or group parameter!"
+# (attempt 15's validation phase, after the venv cycle fix). Point it
+# at the generic 'default' group of validate-tempest's tempest_allow.yml
+# (tests: [smoke], all releases) so the validation runs the smoke suite.
+tempest_allowed_group: default
+
 # tqe's undercloud-deploy role derives undercloud_nameservers from the
 # virthost's /etc/resolv.conf with an IPv4-only awk regex that mangles
 # IPv6 nameservers (2a02:8429:3783:6301::1 becomes "2a02:8429:"); the
