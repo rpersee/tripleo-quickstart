@@ -19,4 +19,4 @@
     - name: Patch container-puppet.sh for rsync >= 3.2.3 excluded file-list rejection
       script: files/patch_container_puppet_rsync.py
       register: _tht_rsync_patch
-      changed_when: "'patched:' in _tht_rsync_patch.stdout"
+      changed_when: _tht_rsync_patch.stdout is match('patched:')
