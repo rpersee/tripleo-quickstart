@@ -74,4 +74,72 @@ if [ -d /etc/puppet/modules/pacemaker/lib/puppet/provider ] && \
         [ -f "$F" ] && sed -i 's,constraint list | grep #{constraint_name},constraint ref #{bundle ? bundle : @resource[:name]} | grep #{constraint_name},' "$F" || true
     done
 fi
+
+# The pcmk_constraint provider probes colocation constraints by
+# matching "<rsc> with <loc>" in "pcs constraint colocation show
+# --full" output. pcs >= 0.11.12 prints "resource '<rsc>' with
+# resource '<loc>'" instead (quotes + extra keyword), so re-runs of
+# the haproxy bundle puppet never find the already-created
+# constraints and pcs rejects the re-creation as a duplicate (same
+# era-mismatch as the probes above; bites only on config-download
+# re-runs/resumes). Accept both layouts, and render roles from the
+# new inline form ("(promoted)") in the master_slave branch as well.
+CONSTRAINT_F="$PCMK_MOD_DIR/pcmk_constraint/default.rb"
+if [ -f "$CONSTRAINT_F" ]; then
+    if grep -q 'Accept both layouts' "$CONSTRAINT_F"; then
+        echo "pacemaker_probe_fix: $CONSTRAINT_F already patched"
+    elif ! grep -q "line.include? resource_resource + ' with ' + resource_location" "$CONSTRAINT_F"; then
+        echo "pacemaker_probe_fix: WARN no known colocation probe in $CONSTRAINT_F (module layout changed?)"
+    else
+        python3 - <<'PYEOF'
+path = '/usr/share/openstack-puppet/modules/pacemaker/lib/puppet/provider/pcmk_constraint/default.rb'
+s = open(path).read()
+old = """            when :colocation
+                resource_location = @resource[:location].gsub(':', '.')
+                resource_resource = @resource[:resource].gsub(':', '.')
+                if @resource[:master_slave]
+                  # pacemaker 2.1 started returning Promoted instead of Master
+                  # so we need to cater to both
+                  return true if line.include? resource_resource + ' with ' + resource_location and (line.include? "with-rsc-role:Master" or line.include? "with-rsc-role:Promoted")
+                else
+                  return true if line.include? resource_resource + ' with ' + resource_location
+                end
+            when :order
+                return true if line.include? resource_name
+"""
+new = """            when :colocation
+                resource_location = @resource[:location].gsub(':', '.')
+                resource_resource = @resource[:resource].gsub(':', '.')
+                # Accept both layouts: pcs < 0.11.12 prints
+                # "<rsc> with <loc> [with-rsc-role:X]"; pcs >= 0.11.12
+                # prints "resource '<rsc>' with resource '<loc>'" and
+                # renders roles inline ("(promoted)").
+                pair = (line.include? resource_resource and line.include? resource_location)
+                role = (line.include? "Master" or line.include? "Promoted" or line.include? "promoted")
+                if @resource[:master_slave]
+                  return true if pair and role
+                else
+                  return true if pair
+                end
+            when :order
+                first_resource = @resource[:first_resource].gsub(':', '.')
+                second_resource = @resource[:second_resource].gsub(':', '.')
+                # pcs < 0.11.12 prints "<first> then <second>"; pcs >=
+                # 0.11.12 prints "start resource '<first>' then start
+                # resource '<second>'". Accept both.
+                return true if (line.include? resource_name) or (line.include? first_resource and line.include? second_resource)
+"""
+assert old in s, 'pcmk_constraint probe text not found'
+open(path, 'w').write(s.replace(old, new))
+PYEOF
+        if grep -q 'Accept both layouts' "$CONSTRAINT_F"; then
+            echo "pacemaker_probe_fix: patched $CONSTRAINT_F"
+        else
+            echo "pacemaker_probe_fix: ERROR constraint patch produced no change in $CONSTRAINT_F"
+            exit 1
+        fi
+    fi
+else
+    echo "pacemaker_probe_fix: WARN $CONSTRAINT_F not found, skipping"
+fi
 {% endif %}
