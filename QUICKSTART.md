@@ -251,16 +251,15 @@ when the branch was archived), so image rebuilds are reproducible.
   workdir, re-run the bootstrap so the fixed role is re-installed.
 - **Overcloud deploy fails at config-download step 2 with `duplicate
   constraint already exists, use --force to override. Too many tries`** —
-  pcs 0.11.12 (2026 host distro) no longer prints constraint IDs in
-  `constraint list` output, so puppet-pacemaker 1.5.1's `location_exists?`
-  probe (`constraint list | grep location-<name>`) never matches; when the
-  constraint already exists (the bundle provider creates it moments
-  earlier), `Pcmk_resource[galera]` re-creates the same location rule and
-  pcs rejects the duplicate. Fixed in this checkout's `convert-image` role
-  (`pacemaker_probe_fix.sh.j2`: rewrite both providers' probes to
-  `pcs constraint ref <subject>`, which still lists IDs; commit
-  `2ac600ed`). If you wiped the workdir, re-run the bootstrap so the fixed
-  role is re-installed.
+  pcs 0.11.12 (2026 host distro) changed `pcs constraint` output: location
+  constraints lost their printed IDs (breaking `pcmk_bundle`/`pcmk_resource`
+  probes) and colocations print `resource 'X' with resource 'Y'` instead of
+  `X with Y` (breaking the `pcmk_constraint` probe). Frozen puppet-pacemaker
+  1.5.1 then re-creates existing constraints and pcs rejects the
+  duplicates. Fixed in this checkout's `convert-image` role
+  (`pacemaker_probe_fix.sh.j2`: rewrite all three providers' probes;
+  commits `2ac600ed`, `db15e565`). If you wiped the workdir, re-run the
+  bootstrap so the fixed role is re-installed.
 - **Resuming a failed config-download run manually** — use
   `/home/stack/overcloud-deploy/overcloud/config-download/ansible-playbook-command.sh
   --start-at-task 'Set legacy facts'`. Starting later (e.g. at a step 2
